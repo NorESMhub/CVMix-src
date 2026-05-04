@@ -3450,11 +3450,11 @@ contains
     real(cvmix_r8), parameter :: CempCGs = 4.7_cvmix_r8  ! Coeff. relating non-local scalar flux to sfc flux  [nondim]
     real(cvmix_r8) :: PBfact                  ! Ratio of TKE surface layer production to w*^3 [nondim]
     real(cvmix_r8) :: PU, PS , PB             ! Surface layer TKE production terms increments [m3 s-3]
-    real(cvmix_r8) :: ustar, delH, delU, delV, omega_E2x, cosOmega, sinOmega
+    real(cvmix_r8) :: ustar, delH, delU, delV, delz, omega_E2x, cosOmega, sinOmega
     real(cvmix_r8) :: BLDepth, TauMAG, TauCG, TauDG, taux0, tauy0, Stk0 , Pinc
     real(cvmix_r8) :: dtop, tauEtop, tauxtop, tauytop                   ! Cell top values
     real(cvmix_r8) :: dbot, tauEbot, tauxbot, tauybot, sigbot, Gbot     ! Cell bottom values
-    integer        :: ktmp                                              ! vertical loop
+    integer        :: ktmp                                              ! vertical loop index
 
     CVmix_kpp_params_in => CVmix_kpp_params_saved
     if (present(CVmix_kpp_params_user)) then
@@ -3480,7 +3480,8 @@ contains
     dtop    = 0.0
     delU    = uE(1) - uE(2)
     delV    = vE(1) - vE(2)
-    tauEtop = (taux0 * delU + tauy0 * delV ) / (zk(1) - zk(2) )
+    delz    = zk(1) - zk(2)
+    tauEtop = (taux0 * delU + tauy0 * delV ) / delz
     tauxtop = taux0
     tauytop = tauy0
 
@@ -3488,6 +3489,7 @@ contains
     do ktmp = 1, kSL-1
       delU     = uE(ktmp) - uE(ktmp+1)
       delV     = vE(ktmp) - vE(ktmp+1)
+      delz     = zk(ktmp) - zk(ktmp+1)
       Omega_E2x= atan2( delV  , delU )
       cosOmega = cos(Omega_E2x)
       sinOmega = sin(Omega_E2x)
@@ -3502,7 +3504,7 @@ contains
       tauDG    = TauMAG                       ! E
       tauxbot  = tauDG * cosOmega  -  tauCG * sinOmega
       tauybot  = tauDG * sinOmega  +  tauCG * cosOmega
-      tauEbot  = (tauxbot * delU + tauybot * delV) / (zk(ktmp) - zk(ktmp+1) )
+      tauEbot  = (tauxbot * delU + tauybot * delV) / delz
 
       ! Increment Eulerian Shear Production
       Pinc     = 0.5_cvmix_r8 * (tauEbot + tauEtop) * delH
@@ -3521,7 +3523,7 @@ contains
     enddo
 
 ! Integrate from top of surface layer cell to Surface layer Depth
-    delH     = SLDepth + zi(ktmp)
+    delH     = SLDepth + zi(kSL)
     sigbot   = CVmix_kpp_params_in%surf_layer_ext
     Gbot     = cvmix_kpp_composite_shape(sigbot)
     TauMAG   = ustar * ustar * Gbot / sigbot
@@ -3530,13 +3532,18 @@ contains
     tauDG   = TauMAG                       ! E
     tauxbot  = tauDG * cosOmega  -  tauCG * sinOmega
     tauybot  = tauDG * sinOmega  +  tauCG * cosOmega
-    tauEbot  = (tauxbot * delU + tauybot * delV) / (zk(ktmp) - zk(ktmp+1) )
+    if( (kSL > 1) .and. (kSL < size(zk) ) .and. ( SLDepth > -zk(kSL) ) ) then
+      delU     = uE(kSL) - uE(kSL+1)
+      delV     = vE(kSL) - vE(kSL+1)
+      delz     = zk(kSL) - zk(kSL+1)
+    endif
+    tauEbot  = (tauxbot * delU + tauybot * delV) / delz
     ! Increment Eulerian Shear Production
     Pinc     = 0.5_cvmix_r8 * (tauEbot + tauEtop) * delH
     PU       = PU + MAX( Pinc , cvmix_zero )
 
     ! Increment Stokes Shear Production
-    Pinc   = tauxtop*uS(ktmp) - tauxbot*uS_SL     + tauytop*vS(ktmp) - tauybot*vS_SL
+    Pinc   = tauxtop*uS(kSL) - tauxbot*uS_SL     + tauytop*vS(kSL) - tauybot*vS_SL
     Pinc   = Pinc - (tauxtop-tauxbot) * uSb_SL  - (tauytop-tauybot) * vSb_SL
     PS     = PS +  MAX( Pinc , cvmix_zero )
 

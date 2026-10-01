@@ -39,6 +39,8 @@
   integer, parameter, public :: CVMIX_MATH_INTERP_CUBE_SPLINE = 3
 
   real(cvmix_r8), parameter :: CVMIX_MATH_NEWTON_TOL       = 1.0e-12_cvmix_r8
+  real(cvmix_r8), parameter :: CVMIX_MATH_NEWTON_MINSLOPE  = 1.0e-6_cvmix_r8
+  real(cvmix_r8), parameter :: CVMIX_MATH_NEWTON_NUDGE     = 1.0e-3_cvmix_r8
   integer,        parameter :: CVMIX_MATH_MAX_NEWTON_ITERS = 100
 
 ! !PUBLIC MEMBER FUNCTIONS:
@@ -195,7 +197,11 @@
       if (abs(fun_val).lt.CVMIX_MATH_NEWTON_TOL) &
         exit
       slope = 3.0_cvmix_r8*coeffs(4)*(root**2)+2.0_cvmix_r8*coeffs(3)*root+coeffs(2)
-      root = root - fun_val/slope
+      if (abs(slope).lt.CVMIX_MATH_NEWTON_MINSLOPE) then
+        root = root + sign(CVMIX_MATH_NEWTON_NUDGE, root - x0)
+      else
+        root = root - fun_val/slope
+      end if
       fun_val = coeffs(4)*(root**3)+coeffs(3)*(root**2)+coeffs(2)*root+coeffs(1)
     end do
     cvmix_math_cubic_root_find = root
